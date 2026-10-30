@@ -1,4 +1,4 @@
-# Time Series Forecasting: Notes and Inference
+# Time Series Forecasting:Inference
 
 Notebook: `Time_Series_Model.ipynb`. Data: `ChargingRecords_preprocessed.csv` (72,031 sessions, 30 Sep 2021 to 30 Sep 2022).
 
