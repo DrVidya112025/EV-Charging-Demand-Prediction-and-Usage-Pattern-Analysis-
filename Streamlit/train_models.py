@@ -1,5 +1,5 @@
-"""Train regression + classification models and save everything the dashboard needs.
-Run:  python train_models.py        (about 3-4 minutes)"""
+"""Train regression + classification models and save the dashboard needs.
+Run:  python train_models.py       """
 import json, joblib, warnings, numpy as np, pandas as pd
 warnings.filterwarnings('ignore')
 from sklearn.model_selection import train_test_split
