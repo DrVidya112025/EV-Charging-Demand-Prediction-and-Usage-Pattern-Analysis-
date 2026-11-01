@@ -60,18 +60,21 @@ Cleaning applied to the raw file: duplicates removed, sessions with `Duration <=
 .
 ├── README.md
 ├── notebooks/
-│   ├── EV_Charging_Demand_Regression_preprocessed.ipynb   # Part 1
-│   └── EV_Charging_HighDemand_Classification.ipynb        # Part 2
-├── data/
+│   ├── Step1Data understanding and cleaning.ipynb   
+│   └── Step2Exploratory data analysis.ipynb        
+|   └── Step3 Feature Engineering.ipynb
+|   └── Step 4 Regression Classification.ipynb  # Part 1 & 2
+|   └── Time Series Model.ipynb
+├── data/Raw
+|   └── ChargingRecords.csv
+├── data/Processed   
 │   └── ChargingRecords_preprocessed.csv
 └── dashboard/                                             # Part 3
     ├── app.py             # Streamlit app
     ├── common.py          # shared data loading and feature engineering
     ├── train_models.py    # trains and saves the models used by the app
     ├── requirements.txt
-    ├── .streamlit/config.toml
-    ├── data/ChargingRecords_preprocessed.csv
-    └── models/            # saved models, metrics, importances (created by train_models.py)
+    ├── models/            # saved models, metrics, importances (created by train_models.py)
 ```
 
 Adjust the paths above to match your repository layout. The notebooks read `ChargingRecords_preprocessed.csv` from their own folder.
