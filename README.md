@@ -76,7 +76,8 @@ Cleaning applied to the raw file: duplicates removed, sessions with `Duration <=
     ├── requirements.txt
     ├── models/            # saved models, metrics, importances (created by train_models.py)
 ├── Final Presentation/
-|   ├──EV_Charging_Demand_Analysis.pptx 
+|   ├──EV_Charging_Demand_Analysis.pptx
+├── ├── Time_Series_Inference.md   
 ```
 
 Adjust the paths above to match your repository layout. The notebooks read `ChargingRecords_preprocessed.csv` from their own folder.
