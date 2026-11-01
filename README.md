@@ -69,12 +69,14 @@ Cleaning applied to the raw file: duplicates removed, sessions with `Duration <=
 |   └── ChargingRecords.csv
 ├── data/Processed   
 │   └── ChargingRecords_preprocessed.csv
-└── dashboard/                                             # Part 3
+└── Streamlit/                                             # Part 3
     ├── app.py             # Streamlit app
     ├── common.py          # shared data loading and feature engineering
     ├── train_models.py    # trains and saves the models used by the app
     ├── requirements.txt
     ├── models/            # saved models, metrics, importances (created by train_models.py)
+├── Final Presentation/
+|   ├──EV_Charging_Demand_Analysis.pptx 
 ```
 
 Adjust the paths above to match your repository layout. The notebooks read `ChargingRecords_preprocessed.csv` from their own folder.
