@@ -1,202 +1,90 @@
-# ⚡ EV Charging Demand Analysis
+# EV Charging Demand Analysis
 
-Predicting and explaining electric-vehicle charging demand with machine learning, delivered as an interactive Streamlit dashboard.
+Predicts the energy demand (kWh) of an EV charging session, as a regression and as a high/low classification, using about 72,000 charging sessions from 30 Sep 2021 to 30 Sep 2022.
 
-The project has three parts:
+## Headline results
 
-1. **Regression**: predict the energy demand (kWh) of a charging session.
-2. **Classification**: label a session as **High Demand** or **Normal Demand**.
-3. **Dashboard**: a Streamlit app that combines the analysis, both models and their explanations.
+| Task | Best model | Test result |
+|---|---|---|
+| Regression (forecast at plug-in) | XGBoost | MAE 8.97 kWh, R² 0.22 (mean baseline R² 0.00) |
+| Classification (Demand ≥ train median, 14.37 kWh) | Random Forest | Accuracy 0.685, F1 0.690, ROC-AUC 0.759 |
 
-## Table of contents
-
-- [Dataset](#dataset)
-- [Project structure](#project-structure)
-- [Quick start](#quick-start)
-- [Part 1: Regression](#part-1-regression)
-- [Part 2: Classification](#part-2-classification)
-- [Part 3: Streamlit dashboard](#part-3-streamlit-dashboard)
-- [Key findings](#key-findings)
-- [Applications](#applications)
-- [Limitations](#limitations)
-- [Troubleshooting](#troubleshooting)
-- [Tech stack](#tech-stack)
-- [Author](#author)
-
-## Dataset
-
-`ChargingRecords_preprocessed.csv`: **72,031 charging sessions** from 30 Sep 2021 to 30 Sep 2022.
-
-| Column | Description |
-|---|---|
-| `UserID`, `ChargerID` | Identifiers |
-| `ChargerCompany` | Operator (0 / 1) |
-| `ChargerType` | Charger type (0 / 1) |
-| `Location` | 14 site types (apartment, public area, resort, hotel, company, ...) |
-| `StartTimestamp`, `EndTimestamp` | Session start and end |
-| `Duration` | Session length in minutes |
-| **`Demand`** | **Energy delivered in kWh (the regression target)** |
-| `StartHour`, `DayOfWeek`, `IsWeekend`, `Month`, `CrossesMidnight` | Time features |
-| `ElapsedMin`, `IdleMin`, `FlagIdleOver30`, `EndHour` | Post-session fields (not used as features) |
-
-Cleaning applied to the raw file: duplicates removed, sessions with `Duration <= 0` removed, timestamps parsed.
-
-### Features used by the models
-
-| Group | Features |
-|---|---|
-| Charging | `Duration`, `ChargerType`, `ChargerCompany` |
-| Location | `Location` (one-hot encoded) |
-| Time | `StartHour` (plus sin/cos encoding), `DayOfWeek`, `IsWeekend`, `Month`, overnight flag |
-
-**Deliberately excluded:**
-
-- `UserID`, `ChargerID`: identifiers, not physical drivers of demand.
-- `ElapsedMin`, `IdleMin`, `FlagIdleOver30`, `EndHour`: only known after the session ends, and `ElapsedMin` nearly duplicates `Duration`. Including them would inflate scores unfairly.
+R² is modest by design: session length (`Duration`) is the strongest driver of demand but is unknown when a session starts, so it is excluded to avoid leakage.
 
 ## Project structure
 
-```text
-.
-├── README.md
-├── notebooks/
-│   ├── Step1Data understanding and cleaning.ipynb   
-│   └── Step2Exploratory data analysis.ipynb        
-|   └── Step3 Feature Engineering.ipynb
-|   └── Step 4 Regression Classification.ipynb  # Part 1 & 2
-|   └── Time Series Model.ipynb
-├── data/Raw
-|   └── ChargingRecords.csv
-├── data/Processed   
-│   └── ChargingRecords_preprocessed.csv
-└── Streamlit/                                             # Part 3
-    ├── app.py             # Streamlit app
-    ├── common.py          # shared data loading and feature engineering
-    ├── train_models.py    # trains and saves the models used by the app
-    ├── requirements.txt
-    ├── models/            # saved models, metrics, importances (created by train_models.py)
-├── Final Presentation/
-|   ├──EV_Charging_Demand_Analysis.pptx
-├── ├── Time_Series_Inference.md   
-```
+| Step | Notebook / file | Purpose |
+|---|---|---|
+| 1–2 | Cleaning notebooks | Produce `ChargingRecords_preprocessed.csv` (cleaned sessions) |
+| 3 | `Step3 Feature Engineering.ipynb` | Time features, charger-history features, chronological split; writes `train.csv`, `val.csv`, `test.csv`, `feature_metadata.json` |
+| 4 | `Step4_Regression_Classification_Forecast.ipynb` | Model comparison, class imbalance, SHAP and LIME on the Step 3 files |
+| 4 (optional) | `Step 4 Regression Classification.ipynb` | Explanatory analysis on the cleaned CSV, with `Duration` |
 
-Adjust the paths above to match your repository layout. The notebooks read `ChargingRecords_preprocessed.csv` from their own folder.
+## How to run
 
-## Quick start
+1. Install: `pip install pandas numpy scikit-learn xgboost lightgbm imbalanced-learn shap lime matplotlib seaborn`
+2. Run Step 3 to create `train.csv`, `val.csv`, `test.csv`.
+3. In Step 4, set `FOLDER` (section 1) to the folder holding those three files.
+4. Run all cells top to bottom (about 8 minutes on a 2-core machine).
 
-**Requirements:** Python 3.10+
+## Method summary
 
-```bash
-git clone <your-repo-url>
-cd <your-repo>/dashboard
-pip install -r requirements.txt
-streamlit run app.py
-```
+- **Chronological split:** 70/15/15 by start time (train 50,391, validation 10,776, test 10,805 sessions). Sessions that straddle a boundary are purged (59 rows).
+- **No leakage:** `Duration`, `ElapsedMin`, `IdleMin` and end-time columns are excluded. `UserID` and `ChargerID` are not used as features.
+- **History features:** built only from sessions on the same charger that had already ended before the session started (count, mean demand, 7-day activity, 24-hour utilisation, hours since last session). Verified against a brute-force loop with 0 mismatches.
+- **Fitted on train only:** fill values, encoders and the classification threshold.
+- **Selection:** fit on train, choose on validation (lowest RMSE / highest ROC-AUC), report test once. Cross-validation uses `TimeSeriesSplit`.
+- **Month features dropped:** one year of data means validation and test months are unseen in training.
 
-The app opens at <http://localhost:8501>.
+## Results
 
-The saved models in `models/` were built with specific library versions. If they cannot be loaded on your machine, the app **retrains them automatically** on first start (about 3 to 5 minutes, once). You can also do it manually:
+### Regression
 
-```bash
-python train_models.py
-```
+| Model | Val RMSE | Val R² | Test MAE | Test R² |
+|---|---|---|---|---|
+| Mean baseline | 13.995 | -0.001 | 10.735 | -0.001 |
+| Linear Regression | 12.229 | 0.236 | 9.129 | 0.225 |
+| Decision Tree | 12.291 | 0.228 | 9.275 | 0.161 |
+| Random Forest | 12.064 | 0.256 | 9.050 | 0.211 |
+| Gradient Boosting | 12.095 | 0.252 | 8.992 | 0.224 |
+| **XGBoost** | **12.034** | 0.260 | 8.966 | 0.219 |
+| LightGBM | 12.047 | 0.258 | 8.935 | 0.223 |
 
-To run the notebooks:
+The top models are within about 0.03 RMSE of each other; Linear Regression is nearly as good.
 
-```bash
-pip install jupyter xgboost lightgbm imbalanced-learn
-jupyter notebook
-```
+### Classification
 
-Both notebooks have a `FAST = True` switch in the first cell (quick run, about 2 minutes). Set it to `False` for the full run with 5-fold cross-validation and hyper-parameter tuning (slow).
-
-## Part 1: Regression
-
-**Goal:** predict `Demand` (kWh) for a session.
-
-**Models compared:** Linear Regression, Decision Tree, Random Forest, Gradient Boosting, XGBoost, LightGBM. Metrics are MAE, MSE, RMSE and R², measured on a 20% hold-out set, with cross-validation on the training set.
-
-| Model | MAE | RMSE | R² (test) |
+| Model | Val ROC-AUC | Test F1 | Test ROC-AUC |
 |---|---|---|---|
-| **XGBoost** | 3.32 | **5.86** | **0.811** |
-| LightGBM | 3.35 | 5.88 | 0.809 |
-| Random Forest | 3.28 | 5.96 | 0.805 |
-| Gradient Boosting | 3.54 | 6.14 | 0.792 |
-| Decision Tree | 3.56 | 6.28 | 0.783 |
-| Linear Regression | 5.51 | 8.46 | 0.606 |
+| Logistic Regression | 0.757 | 0.677 | 0.743 |
+| Decision Tree | 0.759 | 0.685 | 0.747 |
+| **Random Forest** | **0.778** | 0.690 | 0.759 |
+| KNN | 0.741 | 0.666 | 0.722 |
+| SVM | 0.767 | 0.692 | 0.752 |
+| XGBoost | 0.777 | 0.698 | 0.759 |
+| LightGBM | 0.775 | 0.698 | 0.760 |
 
-**Best validated model: XGBoost.** Cross-validation R² is about 0.80, close to the test score, so there is no sign of overfitting. Tuning XGBoost and LightGBM did not beat the untuned versions.
+### Class imbalance
 
-Notebook: `EV_Charging_Demand_Regression_preprocessed.ipynb`
+The median target is balanced, so no resampling is needed there. On a separate 10% target (Demand ≥ train 90th percentile, 37.17 kWh), class weights and oversampling raise recall (for example Random Forest 0.07 to 0.65) and lower precision, with little change in ROC-AUC and PR-AUC.
 
-## Part 2: Classification
+### Explainability
 
-**Goal:** classify sessions as **High Demand** (`Demand >=` median) or **Normal Demand** (`Demand <` median).
+SHAP ranks `hist_mean_demand_prior`, `hist_mean_demand_7d` and `Hour_cos` as the main drivers. LIME explains individual sessions. Removing the history features raises validation error by about 11% and roughly halves R².
 
-- Median threshold: **14.26 kWh**.
-- **Class balance:** a median split gives about 50 / 50, so there is no real imbalance and resampling is not required.
-- Random Oversampling, SMOTE and ADASYN were still tested (inside the training pipeline only, never on the test set). On the balanced target they change nothing meaningful. ADASYN cannot run on perfectly balanced classes.
-- To show when resampling matters, the notebook also tests a top-10% target. There, Random Oversampling raised recall from 0.80 to 0.94 but dropped precision from 0.82 to 0.66. SMOTE and ADASYN changed little.
+## Two analyses, two questions
 
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|---|---|---|---|---|---|
-| **LightGBM** | 0.901 | 0.872 | 0.939 | 0.904 | **0.962** |
-| XGBoost | 0.901 | 0.870 | 0.942 | 0.905 | 0.962 |
-| Random Forest | 0.900 | 0.866 | 0.946 | 0.904 | 0.959 |
-| Decision Tree | 0.897 | 0.873 | 0.929 | 0.900 | 0.953 |
-| SVM | 0.873 | 0.833 | 0.933 | 0.880 | 0.937 |
-| KNN | 0.826 | 0.800 | 0.868 | 0.833 | 0.913 |
-| Logistic Regression | 0.841 | 0.824 | 0.868 | 0.845 | 0.911 |
+| | Cleaned data, with `Duration` | Step 3 files, forecast |
+|---|---|---|
+| Question | Energy for a session of known length | Energy given only what is known at plug-in |
+| Regression R² / MAE | 0.811 / 3.31 kWh | 0.219 / 8.97 kWh |
+| Classification ROC-AUC | 0.962 | 0.759 |
 
-**Best validated model: LightGBM** (cross-validation ROC-AUC 0.961). SVM is trained on a 12,000-row sample in fast mode because it is slow on the full training set, and is still scored on the full test set.
+The 0.81 is explanatory, not a forecast.
 
-Notebook: `EV_Charging_HighDemand_Classification.ipynb`
+## Limitations and next steps
 
-## Part 3: Streamlit dashboard
-
-An interactive Streamlit app in the `dashboard/` folder that combines the data analysis, both models (regression and classification) and their explanations (SHAP and LIME).
-
-```bash
-cd dashboard
-streamlit run app.py
-```
-
-## Key findings
-
-- Session duration is the strongest predictor of charging demand.
-- Charger type significantly affects energy consumption.
-- Demand varies across locations and charger companies.
-- Tree-based models outperform linear models, indicating non-linear demand patterns.
-- Accommodation sites, camping sites, and bus garages show higher average charging demand.
-
-## Applications
-
-- EV Infrastructure Planning
-- Smart Energy Management
-- Charging Station Optimization
-
-## Limitations
-
-- **`Duration` is only known once a session ends.** The models therefore answer: *given a session of this length and context, how much energy will it use?* They are not plug-in-time forecasts. Without `Duration`, performance drops sharply (regression R² about 0.16 for the best model, classification ROC-AUC about 0.72). Both notebooks include a section showing this.
-- Only one year of data is available, so month effects reflect a single season cycle.
-- The saved model files depend on library versions (see [Troubleshooting](#troubleshooting)).
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `xgboost ... input stream corrupted` when loading models | The saved models were built with different library versions. Use the latest `app.py` (it retrains automatically) or run `python train_models.py`. |
-| `No module named 'shap'` / `'lime'` / `'lightgbm'` | `pip install -r requirements.txt` |
-| `AttributeError: ... socketserver ... UnixStreamServer` | A broken optional `pyspark` install on Windows. The latest `app.py` works around it. You can also run `pip uninstall pyspark`. |
-| `'streamlit' is not recognized` | Use `python -m streamlit run app.py` |
-| Notebook stops with `NameError` on `X_train` or `RS` | An earlier cell failed. Use Kernel, Restart and Run All, and look at the first error. |
-
-## Tech stack
-
-Python, pandas, NumPy, scikit-learn, XGBoost, LightGBM, imbalanced-learn, SHAP, LIME, Plotly, Matplotlib, Streamlit, Jupyter.
-
-## Author
-
-**Vidya Priya V**
-
-- Machine Learning & Data Analytics Enthusiast
+- One year of data: seasonal effects cannot be learned or tested.
+- `UserID` is unused (ID 0 covers 43% of sessions and looks like a placeholder); reliable user history could add signal.
+- Hyperparameters were not tuned.
+- Next: tune the top three models on validation, add user-level history, add a second year of data.
